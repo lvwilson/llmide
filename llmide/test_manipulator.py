@@ -281,5 +281,73 @@ def non_existing_method():
         with self.assertRaises(ValueError):
             remove_code(self.source_code, address)
 
+    def test_replace_class(self):
+        source_code = """
+class TestClass:
+    \"\"\"
+    A test class that stores a value and can double it.
+
+    Attributes:
+    value (int): The stored value.
+    \"\"\"
+
+    def __init__(self, value):
+        self.value = value
+
+    def double_value(self):
+        return self.value * 4
+
+
+def main():
+    test_instance = TestClass(5)
+    result = test_instance.double_value()
+    print(f"The doubled value is: {result}")
+
+
+if __name__ == "__main__":
+    main()"""
+        
+        new_class = """
+class TestClass:
+    \"\"\"
+    A test class that stores a value and can double it.
+
+    Attributes:
+    value (int): The stored value.
+    \"\"\"
+
+    def __init__(self, value):
+        self.value = value
+
+    def double_value(self):
+        return self.value * 2"""
+
+        expected_code = """
+class TestClass:
+    \"\"\"
+    A test class that stores a value and can double it.
+
+    Attributes:
+    value (int): The stored value.
+    \"\"\"
+
+    def __init__(self, value):
+        self.value = value
+
+    def double_value(self):
+        return self.value * 2
+
+
+def main():
+    test_instance = TestClass(5)
+    result = test_instance.double_value()
+    print(f"The doubled value is: {result}")
+
+
+if __name__ == "__main__":
+    main()"""
+
+        result_code = replace_code(source_code, "TestClass", new_class)
+        self.assertCodeEqual(result_code, expected_code)
 if __name__ == "__main__":
     unittest.main()

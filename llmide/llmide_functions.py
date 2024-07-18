@@ -1,10 +1,81 @@
-import codemanipulator
+from . import codemanipulator
 import os
 import io
 import pty
 import subprocess
 import threading
 import sys
+from . import code_scissors
+
+def insert_code_after_matching_line(file_path, line, new_code):
+    try:
+        with open(file_path, "r") as file:
+            source_code = file.read()
+    except Exception as e:
+        return (file_path + " read error: " + str(e))
+    source_code = code_scissors.insert_after(source_code, line, new_code)
+    try:
+        with open(file_path, "w") as file:
+            file.write(source_code)
+        return (file_path + " successfully written.")
+    except Exception as e:
+        return (file_path + " write error: " + str(e))
+    
+def insert_code_before_matching_line(file_path, line, new_code):
+    try:
+        with open(file_path, "r") as file:
+            source_code = file.read()
+    except Exception as e:
+        return (file_path + " read error: " + str(e))
+    source_code = code_scissors.insert_before(source_code, line, new_code)
+    try:
+        with open(file_path, "w") as file:
+            file.write(source_code)
+        return (file_path + " successfully written.")
+    except Exception as e:
+        return (file_path + " write error: " + str(e))
+    
+def replace_code_before_matching_line(file_path, line, new_code):
+    try:
+        with open(file_path, "r") as file:
+            source_code = file.read()
+    except Exception as e:
+        return (file_path + " read error: " + str(e))
+    source_code = code_scissors.replace_before(source_code, line, new_code)
+    try:
+        with open(file_path, "w") as file:
+            file.write(source_code)
+        return (file_path + " successfully written.")
+    except Exception as e:
+        return (file_path + " write error: " + str(e))
+    
+def replace_code_after_matching_line(file_path, line, new_code):
+    try:
+        with open(file_path, "r") as file:
+            source_code = file.read()
+    except Exception as e:
+        return (file_path + " read error: " + str(e))
+    source_code = code_scissors.replace_after(source_code, line, new_code)
+    try:
+        with open(file_path, "w") as file:
+            file.write(source_code)
+        return (file_path + " successfully written.")
+    except Exception as e:
+        return (file_path + " write error: " + str(e))
+    
+def replace_code_between_matching_lines(file_path, line1, line2, new_code):
+    try:
+        with open(file_path, "r") as file:
+            source_code = file.read()
+    except Exception as e:
+        return (file_path + " read error: " + str(e))
+    source_code = code_scissors.replace_between(source_code, line1, line2, new_code)
+    try:
+        with open(file_path, "w") as file:
+            file.write(source_code)
+        return (file_path + " successfully written.")
+    except Exception as e:
+        return (file_path + " write error: " + str(e))
 
 def read_code_signatures_and_docstrings(file_path):
     """
@@ -80,9 +151,12 @@ def replace_code_at_address(file_path, address, new_code):
     try:
         with open(file_path, "r") as file:
             source_code = file.read()
-            source_code = codemanipulator.replace_code(source_code, address, new_code)
     except Exception as e:
         return (file_path + " read error: " + str(e))
+    try:
+        source_code = codemanipulator.replace_code(source_code, address, new_code)
+    except Exception as e:
+        return (file_path + " replace error: " + str(e))
     try:
         return codemanipulator.write_code(file_path, source_code)
     except Exception as e:
@@ -176,6 +250,10 @@ def run_console_command(command: str) -> str:
     :param command: A string containing the console command to be executed.
     :return: The output from the command.
     """
+    def remove_surrounding_quotes(s: str) -> str:
+        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+            return s[1:-1]
+        return s
     def read_output(fd, output_list):
         try:
             while True:
@@ -188,14 +266,14 @@ def run_console_command(command: str) -> str:
         except OSError:
             # Handle the case where the file descriptor is closed
             pass
-    print(command)
+    #print(command)
     try:
         output = []
 
         # Create a pseudo-terminal
         master_fd, slave_fd = pty.openpty()
-
-        process = subprocess.Popen(command, shell=True, stdin= slave_fd, stdout=slave_fd, stderr=slave_fd, text=True, close_fds=True)
+        stripped_command = remove_surrounding_quotes(command)
+        process = subprocess.Popen(stripped_command, shell=True, stdin= slave_fd, stdout=slave_fd, stderr=slave_fd, text=True, close_fds=True)
 
         # Close the slave fd in the parent process
         os.close(slave_fd)

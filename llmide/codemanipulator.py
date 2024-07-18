@@ -35,98 +35,50 @@ def add_prefix_to_lines(input_string, prefix):
     return result_string
 
 class CodeManipulator(ast.NodeTransformer):
-    """
-    A class to manipulate the abstract syntax tree (AST) of Python code.
-
-    Attributes:
-    target (str): The target node to be manipulated.
-    new_code_ast (ast.AST): The new AST node to replace or add.
-    insert_position (str): The position to insert new code ('before' or 'after').
-
-    Methods:
-    visit_Module(node): Visit a module node.
-    visit_ClassDef(node): Visit a class definition node.
-    visit_FunctionDef(node): Visit a function definition node.
-    """
     def __init__(self, target, new_code=None, insert_position=None, action="replace"):
-        """
-        Initialize the CodeManipulator with a target and optional new code.
-
-        Parameters:
-        target (str): The target node to be manipulated.
-        new_code (str): The new code to replace or add (optional).
-        insert_position (str): The position to insert new code ('before' or 'after').
-        action (str): The action to perform ("replace", "create", "remove").
-        """
         self.target = target
         self.new_code_ast = ast.parse(new_code).body[0] if new_code else None
         self.insert_position = insert_position
         self.action = action
         self.class_stack = []
         self.found = False
-        #print(f"Initialized CodeManipulator with target: {self.target}, insert_position: {self.insert_position}, action: {self.action}")
 
     def visit_Module(self, node):
-        """
-        Visit a module node and manipulate it if the target is "__module__".
-
-        Parameters:
-        node (ast.Module): The module node to visit.
-
-        Returns:
-        ast.Module: The modified module node.
-        """
         self.generic_visit(node)
         if self.new_code_ast and "." not in self.target and self.action == "create" and not any(
             isinstance(n, ast.FunctionDef) and n.name == self.target for n in node.body):
             node.body.append(self.new_code_ast)
             self.found = True
-        #print(f"visit_Module: found={self.found}")
         return node
 
     def visit_ClassDef(self, node):
-        """
-        Visit a class definition node and manipulate it if it matches the target.
-
-        Parameters:
-        node (ast.ClassDef): The class definition node to visit.
-
-        Returns:
-        ast.ClassDef: The modified class definition node.
-        """
         self.class_stack.append(node.name)
-        #print(f"Visiting ClassDef: {node.name}, class_stack={self.class_stack}")
         self.generic_visit(node)
+        current_path = ".".join(self.class_stack)
 
-        if self.class_stack and ".".join(self.class_stack) == ".".join(self.target.split(".")[:-1]):
-            if self.new_code_ast and self.action == "create" and not any(
-                isinstance(n, ast.FunctionDef) and n.name == self.target.split(".")[-1]
-                for n in node.body
-            ):
+        if current_path == self.target:
+            self.found = True
+            if self.action == "replace":
+                self.class_stack.pop()
+                return self.new_code_ast
+            elif self.action == "remove":
+                self.class_stack.pop()
+                return None
+
+        if self.action == "create" and current_path == ".".join(self.target.split(".")[:-1]):
+            method_name = self.target.split(".")[-1]
+            if not any(isinstance(n, ast.FunctionDef) and n.name == method_name for n in node.body):
                 node.body.append(self.new_code_ast)
                 self.found = True
 
         self.class_stack.pop()
-        #print(f"visit_ClassDef: found={self.found}, class_stack={self.class_stack}")
         return node
 
     def visit_FunctionDef(self, node):
-        """
-        Visit a function definition node and manipulate it if it matches the target.
-
-        Parameters:
-        node (ast.FunctionDef): The function definition node to visit.
-
-        Returns:
-        ast.AST: The modified function definition node or None.
-        """
         current_path = ".".join(self.class_stack + [node.name])
-        #print(f"Visiting FunctionDef: {current_path}")
 
         if current_path == self.target:
             self.found = True
-            #print(f"Found target function: {self.target}")
-
             if self.action == "replace":
                 return self.new_code_ast if self.new_code_ast else None
             elif self.action == "remove":
@@ -136,9 +88,6 @@ class CodeManipulator(ast.NodeTransformer):
         return node
 
     def generic_visit(self, node):
-        """
-        Called if no explicit visitor function exists for a node.
-        """
         for field, old_value in ast.iter_fields(node):
             if isinstance(old_value, list):
                 new_values = []
@@ -161,20 +110,6 @@ class CodeManipulator(ast.NodeTransformer):
         return node
 
 def _create_or_replace_code(source_code, address, new_code, create_if_missing, insert_position=None, action="replace"):
-    """
-    Create or replace code in the source code at the specified address.
-
-    Parameters:
-    source_code (str): The source code to manipulate.
-    address (str): The address of the target node.
-    new_code (str): The new code to insert or replace.
-    create_if_missing (bool): Flag to create the code if the target does not exist.
-    insert_position (str): The position to insert new code ('before' or 'after').
-    action (str): The action to perform ("replace", "create", "remove").
-
-    Returns:
-    str: The modified and formatted source code.
-    """
     tree = ast.parse(source_code)
     manipulator = CodeManipulator(address, new_code, insert_position, action)
     modified_tree = manipulator.visit(tree)
@@ -183,7 +118,7 @@ def _create_or_replace_code(source_code, address, new_code, create_if_missing, i
             f"The target '{address}' does not exist and 'create_if_missing' is set to False."
         )
     modified_code = ast.unparse(modified_tree)
-    return format_code(modified_code)
+    return modified_code
 
 def create_code(source_code, address, new_code):
     """

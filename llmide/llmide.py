@@ -1,11 +1,26 @@
 import re
-import llmide_functions
+from . import llmide_functions
+
+def split_preserving_quotes(s):
+    # This regex will split by spaces but preserve quoted segments
+    pattern = r'(?:"[^"]*"|\'[^\']*\'|\S)+'
+    matches = re.findall(pattern, s)
+    
+    # Remove the quotes from the matches
+    result = [match[1:-1] if match[0] in ('"', "'") else match for match in matches]
+    return result
+
+# Example usage
+#input_string = 'This is a "quoted segment" and this is \'another one\''
+#split_result = split_preserving_quotes(input_string)
+#print(split_result)
+
 
 def process_content(content):
     # Regex pattern to find the command and arguments
     command_pattern = r"^Command: (\S+)\s*(.*)$"
     # Updated regex pattern to ignore the language specifier in the opening backticks
-    backtick_pattern = r"```(?:\w+)?\s*(.*?)(?=```)"
+    backtick_pattern = r"```(?:\w+)?\s*(.*?)```"
     
     # Searching for the command and arguments
     command_match = re.search(command_pattern, content, re.MULTILINE)
@@ -17,9 +32,13 @@ def process_content(content):
         arguments = None
     
     # Searching for content within backticks
-    backtick_match = re.search(backtick_pattern, content, re.DOTALL)
+    backtick_match = None
+    backtick_matches = re.findall(backtick_pattern, content, re.DOTALL)
+    #print(backtick_matches[0])
+    if len(backtick_matches) > 0:
+        backtick_match = backtick_matches[0]
     if backtick_match:
-        backtick_content = backtick_match.group(1).strip()
+        backtick_content = backtick_match
     else:
         backtick_content = None
     if command:
@@ -30,20 +49,22 @@ def process_content(content):
 def _execute_command(command, arguments, backticks):
     if command is None:
         return "Error: Command name must be specified correctly."
-    if arguments is None:
-        arguments = []
-    elif not isinstance(arguments, list):
-        arguments = [arguments]
+    if command != "run_console_command":
+        args = split_preserving_quotes(arguments)
+    else:
+        args = arguments
+    if not isinstance(args, list):
+        args = [args]
     if backticks is not None:
-        arguments.append(backticks)
-    if not arguments:
+        args.append(backticks)
+    if not args:
         return "Error: Arguments must be specified correctly"
     try:
         function = getattr(llmide_functions, command.lower())
     except AttributeError:
         return "Error: Command not found"
     try:
-        return function(*arguments)
+        return function(*args)
     except Exception as e:
         return f"Error executing command: {e}"
 
