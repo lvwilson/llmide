@@ -6,6 +6,16 @@ import subprocess
 import threading
 import sys
 from . import code_scissors
+import pwd
+
+def get_default_shell():
+    """Returns the default shell for the current user."""
+    if sys.platform == "win32":
+        # Default to cmd.exe on Windows, as detailed shell detection is complex
+        return os.getenv('COMSPEC', 'cmd.exe')
+    else:
+        # Get the default shell from the user's entry in the password database on Unix-like systems
+        return pwd.getpwuid(os.getuid()).pw_shell
 
 def insert_code_after_matching_line(file_path, line, new_code):
     try:
@@ -245,7 +255,7 @@ def read_code_from_file(file_path):
     
 def run_console_command(command: str) -> str:
     """
-    Executes a console command given as a string and returns the command's output.
+    Executes a console command using a specified shell or the system default and returns the command's output.
 
     :param command: A string containing the console command to be executed.
     :return: The output from the command.
@@ -254,6 +264,7 @@ def run_console_command(command: str) -> str:
         if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
             return s[1:-1]
         return s
+
     def read_output(fd, output_list):
         try:
             while True:
@@ -266,14 +277,21 @@ def run_console_command(command: str) -> str:
         except OSError:
             # Handle the case where the file descriptor is closed
             pass
-    #print(command)
+
     try:
         output = []
 
         # Create a pseudo-terminal
         master_fd, slave_fd = pty.openpty()
         stripped_command = remove_surrounding_quotes(command)
-        process = subprocess.Popen(stripped_command, shell=True, stdin= slave_fd, stdout=slave_fd, stderr=slave_fd, text=True, close_fds=True)
+
+        shell_path = get_default_shell()
+        
+        # Specify the executable shell if provided
+        if shell_path:
+            process = subprocess.Popen(stripped_command, shell=True, executable=shell_path, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, text=True, close_fds=True)
+        else:
+            process = subprocess.Popen(stripped_command, shell=True, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, text=True, close_fds=True)
 
         # Close the slave fd in the parent process
         os.close(slave_fd)
@@ -291,12 +309,11 @@ def run_console_command(command: str) -> str:
 
         # Combine the output
         combined_output = ''.join(output)
-        #print("DEBUG:"+combined_output)
         return combined_output if combined_output else "ok"
     except subprocess.CalledProcessError as e:
         return f"An error occurred: {e.stderr}"
     except Exception as e:
-        return f"An error occurred: {e.stderr}"
+        return f"An error occurred: {str(e)}"
 
 def test_function(arg, backticks):
     """
