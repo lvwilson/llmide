@@ -17,7 +17,7 @@ def get_default_shell():
         # Get the default shell from the user's entry in the password database on Unix-like systems
         return pwd.getpwuid(os.getuid()).pw_shell
 
-def insert_code_after_matching_line(file_path, line, new_code):
+def insert_text_after_matching_line(file_path, line, new_code):
     try:
         with open(file_path, "r") as file:
             source_code = file.read()
@@ -31,7 +31,7 @@ def insert_code_after_matching_line(file_path, line, new_code):
     except Exception as e:
         return (file_path + " write error: " + str(e))
     
-def insert_code_before_matching_line(file_path, line, new_code):
+def insert_text_before_matching_line(file_path, line, new_code):
     try:
         with open(file_path, "r") as file:
             source_code = file.read()
@@ -45,7 +45,7 @@ def insert_code_before_matching_line(file_path, line, new_code):
     except Exception as e:
         return (file_path + " write error: " + str(e))
     
-def replace_code_before_matching_line(file_path, line, new_code):
+def replace_text_before_matching_line(file_path, line, new_code):
     try:
         with open(file_path, "r") as file:
             source_code = file.read()
@@ -59,7 +59,7 @@ def replace_code_before_matching_line(file_path, line, new_code):
     except Exception as e:
         return (file_path + " write error: " + str(e))
     
-def replace_code_after_matching_line(file_path, line, new_code):
+def replace_text_after_matching_line(file_path, line, new_code):
     try:
         with open(file_path, "r") as file:
             source_code = file.read()
@@ -73,7 +73,7 @@ def replace_code_after_matching_line(file_path, line, new_code):
     except Exception as e:
         return (file_path + " write error: " + str(e))
     
-def replace_code_between_matching_lines(file_path, line1, line2, new_code):
+def replace_text_between_matching_lines(file_path, line1, line2, new_code):
     try:
         with open(file_path, "r") as file:
             source_code = file.read()
@@ -222,7 +222,7 @@ def add_code_before_address(file_path, address, new_code):
     except Exception as e:
         return (file_path + " write error: " + str(e))
 
-def write_code_to_file(file_path, code):
+def write_text_to_file(file_path, code):
     """
     Write the given code to a file specified by file_path. Use this when creating a new file.
 
@@ -240,7 +240,7 @@ def write_code_to_file(file_path, code):
     except Exception as e:
         return (file_path + " write error: " + str(e))
 
-def read_code_from_file(file_path):
+def read_text_from_file(file_path):
     """
     Read the entire source file specified by file_path.
 
