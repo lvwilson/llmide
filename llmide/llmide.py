@@ -42,6 +42,8 @@ def process_content(content):
     else:
         backtick_content = None
     if command:
+        if command.lower() in ["none", "none.", "done.", "finished.", "done", "finished"]:
+            return "End."
         return _execute_command(command, arguments, backtick_content)
     else:
         return "End."
