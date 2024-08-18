@@ -1,4 +1,5 @@
 import re
+from collections import namedtuple
 from . import llmide_functions
 
 def split_preserving_quotes(s):
@@ -16,7 +17,7 @@ def split_preserving_quotes(s):
 #print(split_result)
 
 
-def process_content(content):
+def process_slice(content):
     # Regex pattern to find the command and arguments
     command_pattern = r"^Command: (\S+)\s*(.*)$"
     # Updated regex pattern to ignore the language specifier in the opening backticks
@@ -27,26 +28,52 @@ def process_content(content):
     if command_match:
         command = command_match.group(1)
         arguments = command_match.group(2)
+        command_end_pos = command_match.end()
     else:
         command = None
         arguments = None
+        command_end_pos = -1
     
     # Searching for content within backticks
     backtick_match = None
-    backtick_matches = re.findall(backtick_pattern, content, re.DOTALL)
-    #print(backtick_matches[0])
-    if len(backtick_matches) > 0:
-        backtick_match = backtick_matches[0]
+    backtick_match = re.search(backtick_pattern, content, re.DOTALL)
     if backtick_match:
-        backtick_content = backtick_match
+        backtick_content = backtick_match.group(1)
+        backtick_end_pos = backtick_match.end()
     else:
         backtick_content = None
+        backtick_end_pos = -1
+
+    split_position = max(command_end_pos, backtick_end_pos)
+    remaining_content = content[split_position:].strip()
     if command:
-        if command.lower() in ["none", "none.", "done.", "finished.", "done", "finished"]:
-            return "End."
-        return _execute_command(command, arguments, backtick_content)
+        return command, arguments, backtick_content, remaining_content
+        #return _execute_command(command, arguments, backtick_content)
     else:
+        return None, None, None, None
+
+CommandInfo = namedtuple('CommandInfo', ['command', 'arguments', 'backtick_content'])
+
+def process_content(content):
+    commands = []
+    command, arguments, backtick_content, remaining_content = process_slice(content)
+    if command:
+        commands.append(CommandInfo(command, arguments, backtick_content))
+    #append all of the above to the structure properly
+    while command:
+        command, arguments, backtick_content, remaining_content = process_slice(remaining_content)
+        if command:
+            commands.append(CommandInfo(command, arguments, backtick_content))
+        #append all of the above to the structure properly
+    response = ""
+    if len(commands) == 0:
         return "End."
+    for command in commands:
+        command_response = _execute_command(command.command, command.arguments, command.backtick_content) + "\n"
+        print (command_response)
+        response += command_response
+    return response
+    
 
 def _execute_command(command, arguments, backticks):
     if command is None:
