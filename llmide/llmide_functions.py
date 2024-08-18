@@ -7,6 +7,7 @@ import threading
 import sys
 from . import code_scissors
 import pwd
+from . import findreplace
 
 def get_default_shell():
     """Returns the default shell for the current user."""
@@ -16,6 +17,20 @@ def get_default_shell():
     else:
         # Get the default shell from the user's entry in the password database on Unix-like systems
         return pwd.getpwuid(os.getuid()).pw_shell
+    
+def find_and_replace(file_path, command):
+    try:
+        with open(file_path, "r") as file:
+            source_code = file.read()
+    except Exception as e:
+        return (file_path + " read error: " + str(e))
+    source_code = findreplace.find_replace(source_code, command)
+    try:
+        with open(file_path, "w") as file:
+            file.write(source_code)
+        return (file_path + " successfully written.")
+    except Exception as e:
+        return (file_path + " write error: " + str(e))
 
 def insert_text_after_matching_line(file_path, line, new_code):
     try:
@@ -215,6 +230,30 @@ def add_code_before_address(file_path, address, new_code):
     except Exception as e:
         return (file_path + " read error: " + str(e))
     source_code = codemanipulator.insert_code_before(source_code, address, new_code)
+    try:
+        with open(file_path, "w") as file:
+            file.write(source_code)
+        return (file_path + " successfully written.")
+    except Exception as e:
+        return (file_path + " write error: " + str(e))
+    
+def remove_code_at_address(file_path, address):
+    """
+    Removes code at a specific address within the provided source code file.
+
+    Parameters:
+    file_path (str): The path to the source code file.
+    address (str): A dot-separated path indicating the location of the target node.
+
+    Returns:
+    str: A message indicating whether the operation was successful or an error occurred.
+    """
+    try:
+        with open(file_path, "r") as file:
+            source_code = file.read()
+    except Exception as e:
+        return (file_path + " read error: " + str(e))
+    source_code = codemanipulator.remove_code(source_code, address)
     try:
         with open(file_path, "w") as file:
             file.write(source_code)
