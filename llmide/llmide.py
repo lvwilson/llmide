@@ -39,8 +39,15 @@ def process_slice(content):
     backtick_match = re.search(backtick_pattern, content, re.DOTALL)
     if backtick_match:
         backtick_content = backtick_match.group(1)
+        backtick_start_pos = backtick_match.start()
         backtick_end_pos = backtick_match.end()
     else:
+        backtick_content = None
+        backtick_end_pos = -1
+        backtick_start_pos = -1
+
+    #ignore backticks if not directly attached to command
+    if (backtick_start_pos - command_end_pos > 1):
         backtick_content = None
         backtick_end_pos = -1
 
@@ -48,7 +55,6 @@ def process_slice(content):
     remaining_content = content[split_position:].strip()
     if command:
         return command, arguments, backtick_content, remaining_content
-        #return _execute_command(command, arguments, backtick_content)
     else:
         return None, None, None, None
 
@@ -70,7 +76,8 @@ def process_content(content):
         return "End."
     for command in commands:
         command_response = _execute_command(command.command, command.arguments, command.backtick_content) + "\n"
-        print (command_response)
+        if command.command != "run_console_command":
+            print (command_response)
         response += command_response
     return response
     
@@ -95,7 +102,7 @@ def _execute_command(command, arguments, backticks):
     try:
         return function(*args)
     except Exception as e:
-        return f"Error executing command: {e}"
+        return f"Error executing command: {e}\n {command}, {arguments}, {backticks}"
 
 # Example usage:
 # content = """
