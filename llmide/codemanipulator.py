@@ -2,12 +2,30 @@ import ast
 import black
 import textwrap
 import re
+import io
+import tokenize
+
+def syntax_check(code):
+    try:
+        io_obj = io.StringIO(code)
+        list(tokenize.generate_tokens(io_obj.readline))
+        ast.parse(code)
+        return True
+    except (SyntaxError, tokenize.TokenError):
+        return False
 
 def format_code(code):
     try:
-        return black.format_str(code, mode=black.FileMode())
+        formatted_code = black.format_str(code, mode=black.FileMode())
+        if syntax_check(formatted_code):
+            return formatted_code
+        else:
+            raise SyntaxError("Syntax check failed after formatting")
     except black.parsing.InvalidInput:
-        return code
+        if syntax_check(code):
+            return code
+        else:
+            raise SyntaxError("Syntax check failed on original code")
 
 def read_code(file_path):
     try:
@@ -384,4 +402,4 @@ def change_docstring(source_code, address, new_docstring):
     if not changer.found:
         raise ValueError(f"The target '{address}' does not exist.")
     modified_code = ast.unparse(modified_tree)
-    return modified_code
+    return format_code(modified_code)

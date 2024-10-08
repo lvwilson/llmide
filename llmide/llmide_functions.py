@@ -1,5 +1,6 @@
 from . import codemanipulator
 import os
+import signal
 import io
 import pty
 import subprocess
@@ -292,6 +293,20 @@ def read_text_from_file(file_path):
     with open(file_path, "r") as file:
         return file.read()
     
+def terminate_process():
+    global process
+    if process: 
+        print("Terminating process...")
+        process.terminate()
+
+# Signal handler for SIGTERM
+def handle_sigterm(signum, frame):
+    print ("Sigterm caught")
+    terminate_process()
+
+#register it
+signal.signal(signal.SIGTERM, handle_sigterm)
+    
 def run_console_command(command: str) -> str:
     """
     Executes a console command using a specified shell or the system default and returns the command's output.
@@ -299,6 +314,8 @@ def run_console_command(command: str) -> str:
     :param command: A string containing the console command to be executed.
     :return: The output from the command.
     """
+    global process
+
     def remove_surrounding_quotes(s: str) -> str:
         if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
             return s[1:-1]
@@ -346,6 +363,7 @@ def run_console_command(command: str) -> str:
         # Close the master fd after the thread completes
         os.close(master_fd)
 
+        process = None
         # Combine the output
         combined_output = ''.join(output)
         return combined_output if combined_output else "ok"

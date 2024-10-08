@@ -21,7 +21,9 @@ def process_slice(content):
     # Regex pattern to find the command and arguments
     command_pattern = r"^Command: (\S+)\s*(.*)$"
     # Updated regex pattern to ignore the language specifier in the opening backticks
-    backtick_pattern = r"```(?:\w+)?\s*(.*?)```"
+    #backtick_pattern = r"```(?:\w+)?\s*(.*?)```"
+    # Updated to catch special characters
+    backtick_pattern = r"```(?:[\w#\+\-]+)?\s*(.*?)```"
     
     # Searching for the command and arguments
     command_match = re.search(command_pattern, content, re.MULTILINE)
@@ -60,6 +62,38 @@ def process_slice(content):
 
 CommandInfo = namedtuple('CommandInfo', ['command', 'arguments', 'backtick_content'])
 
+def concise_representation(input_string, max_chars):
+    if len(input_string) <= max_chars:
+        return input_string
+
+    # Calculate how much of the string we can show at the start and end
+    part_length = (max_chars - 3) // 2  # Deduct 3 for the ellipses
+    first_part = input_string[:part_length]
+    last_part = input_string[-part_length:] if (max_chars % 2 == 0) else input_string[-(part_length + 1):]
+
+    return f"{first_part}...{last_part}"
+
+
+#cut the output at the final read command or first non read command after a read command
+def filter_content(content):
+    read_command_encountered = False
+    command, arguments, backtick_content, remaining_content = process_slice(content)
+    if command:
+        command = CommandInfo(command, arguments, backtick_content)
+        if command =='read_text_from_file':
+            read_command_encountered = True
+    previous_remaining_content = remaining_content
+    while command:
+        command, arguments, backtick_content, remaining_content = process_slice(remaining_content)
+        if command:
+            if command =='read_text_from_file':
+                read_command_encountered = True
+            elif read_command_encountered:
+                n_to_copy = len(content) - len(previous_remaining_content)
+                return content[:n_to_copy]#clip here
+            previous_remaining_content = remaining_content
+    return content
+
 def process_content(content):
     commands = []
     command, arguments, backtick_content, remaining_content = process_slice(content)
@@ -76,8 +110,12 @@ def process_content(content):
         return "End."
     for command in commands:
         command_response = _execute_command(command.command, command.arguments, command.backtick_content) + "\n"
-        if command.command != "run_console_command":
-            print (command_response)
+        if command.command == "run_console_command":            
+            limit = 10000
+            if len(command_response) >= limit:
+                concise_command_response = concise_representation (command_response, limit)
+                command_response = f"Truncating command response to {limit} characters...\n"+concise_command_response
+                print (command_response)
         response += command_response
     return response
     
@@ -104,6 +142,8 @@ def _execute_command(command, arguments, backticks):
     except Exception as e:
         return f"Error executing command: {e}\n {command}, {arguments}, {backticks}"
 
+def terminate_process():
+    llmide_functions.terminate_process()
 # Example usage:
 # content = """
 # Random content...
