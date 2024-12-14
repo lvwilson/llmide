@@ -336,32 +336,34 @@ def run_console_command(command: str) -> str:
 
     try:
         output = []
+        try:
+            # Create a pseudo-terminal
+            master_fd, slave_fd = pty.openpty()
+            stripped_command = remove_surrounding_quotes(command)
 
-        # Create a pseudo-terminal
-        master_fd, slave_fd = pty.openpty()
-        stripped_command = remove_surrounding_quotes(command)
+            shell_path = get_default_shell()
+            
+            # Specify the executable shell if provided
+            if shell_path:
+                process = subprocess.Popen(stripped_command, shell=True, executable=shell_path, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, text=True, close_fds=True)
+            else:
+                process = subprocess.Popen(stripped_command, shell=True, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, text=True, close_fds=True)
 
-        shell_path = get_default_shell()
-        
-        # Specify the executable shell if provided
-        if shell_path:
-            process = subprocess.Popen(stripped_command, shell=True, executable=shell_path, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, text=True, close_fds=True)
-        else:
-            process = subprocess.Popen(stripped_command, shell=True, stdin=slave_fd, stdout=slave_fd, stderr=slave_fd, text=True, close_fds=True)
+            # Close the slave fd in the parent process
+            os.close(slave_fd)
 
-        # Close the slave fd in the parent process
-        os.close(slave_fd)
+            # Start a thread to read the output
+            output_thread = threading.Thread(target=read_output, args=(master_fd, output))
+            output_thread.start()
 
-        # Start a thread to read the output
-        output_thread = threading.Thread(target=read_output, args=(master_fd, output))
-        output_thread.start()
+            # Wait for the process to complete
+            process.wait()
+            output_thread.join()
 
-        # Wait for the process to complete
-        process.wait()
-        output_thread.join()
-
-        # Close the master fd after the thread completes
-        os.close(master_fd)
+            # Close the master fd after the thread completes
+            os.close(master_fd)
+        except KeyboardInterrupt:
+            pass
 
         process = None
         # Combine the output
