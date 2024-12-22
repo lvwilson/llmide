@@ -9,7 +9,6 @@ import sys
 from . import code_scissors
 import pwd
 from . import findreplace
-from . import claudeclient
 import difflib
 
 _backticks = '`````'
@@ -304,6 +303,158 @@ def remove_code_at_address(file_path, address):
     except Exception as e:
         return (file_path + " write error: " + str(e))
 
+
+def manipulate_file_agent(file_path, instructions):
+
+    client = claudeclient.AIClient()
+
+    def extract_contents(output):
+        # Define the pattern to match each section
+        pattern = r"(?P<section>[\w\s/]+?)\s`````(.*?)`````"
+        
+        # Use regex to find all sections
+        matches = re.findall(pattern, output, re.DOTALL)
+        
+        # Create a dictionary from matches with stripped values or None if empty
+        sections = {match[0].strip(): match[1].strip() if match[1].strip() else None for match in matches}
+        
+        # Map specific sections to desired keys (case-sensitive)
+        thoughts = sections.get('Thoughts', None)
+        feedback = sections.get('Feedback', None)
+        file_contents = sections.get('path/to/file', None)  # Preserve case for 'path/to/file'
+        
+        return thoughts, feedback, file_contents
+
+    system_prompt = """
+You are a highly specialized agent tasked with manipulating code and text files. Your role is to faithfully execute the provided instructions on the given input file and output the modified file. Your behavior is guided by the following principles:
+
+1. **Instruction Fidelity**: 
+   - Execute the provided instructions exactly as stated when they are provided. Do not deviate, interpret, or infer intentions beyond what is explicitly given.
+   - If the instructions include verbatim code, ensure it is inserted or modified exactly as written, exactly where it is intended.
+   - If there is insufficient context to understand intent do not output the file and provide feedback to the calling system.
+
+2. **Precision and Clarity**:
+   - If an instruction is ambiguous or could lead to multiple valid outputs, choose the most straightforward interpretation and document any assumptions within comments, but only if allowed.
+   - Do not include extraneous changes, explanations, or modifications outside the scope of the instructions.
+
+3. **File Integrity**:
+   - Ensure that the output preserves the original structure and formatting of the file unless explicitly instructed otherwise.
+   - Retain all original content that is not affected by the instructions.
+
+4. **Error Handling**:
+   - If the instructions cannot be implemented due to conflicts, missing details, or contradictions, output the original file unchanged and document the issue (if permitted by the task).
+
+5. **Neutrality**:
+   - Avoid injecting personal style, optimizations, or corrections unless explicitly requested. Your focus is solely on fulfilling the instructions as provided.
+
+### Input structure:
+Specific changes to apply to the file, which may include verbatim code, descriptions, or general guidance. 
+path/to/file `````The unmodified code or text file.`````
+
+### Output structure:
+Thoughts `````An optional area for you to think through the changes if needed and record your thoughts````
+Feedback `````Your feedback if any to the calling agent. This should be blank unless you absolutely require more information to complete the task.`````
+path/to/file `````The whole and complete modified file with the changes applied as per the instructions, without adding, omitting, or altering anything outside the scope.`````
+
+**Feedback and file output are mutually exclusive, if feedback is provided the file will not be written, so in the case where feedback is required do not output the file contents.**
+
+**Always prioritize exactness and consistency with the instructions above.**
+"""
+    context = []
+
+    try:
+        with open(file_path, "r") as file:
+            original_contents = file.read()
+            original_length = len(original_contents)
+            if (original_length) >= 300000:
+                return (file_path + " read error: the file is too large for the agent to manipulate. Stop work and report." + str(e)) 
+    except Exception as e:
+        return (file_path + " read error: " + str(e))
+
+    
+    formatted_content = f"{file_path} {_backticks}{original_contents}{_backticks}"
+    
+    context.append(AIClient.form_message("user", formatted_content))
+
+    #create response
+    response = self.client.generate_response(system_prompt, context)
+
+    thoughts, feedback, new_contents = extract_contents(response)
+
+    if feedback is not None:
+        return feedback + "\nFile not written."
+
+    if new_contents is None:
+        return "File manipulation agent provided unexpected output. File not written."
+
+    # Generate the diff between the original and new content
+    diff = "\n".join(difflib.unified_diff(
+        original_contents.splitlines(),
+        new_contents.splitlines(),
+        lineterm="",
+        fromfile="original",
+        tofile="new"
+    ))
+
+    try:# 
+        with open(file_path, "w") as file:
+            file.write(new_contents)
+            return (f"{file_path} successfully written.")
+    except Exception as e:
+        return (file_path + " write error: " + str(e))
+
+def append_to_file(file_path, log_message):
+    """
+    Append the given log message to a file specified by file_path.
+    Outputs the lengths of the original and new file contents, as well as the diff.
+
+    Parameters:
+    log_message (str): The log message to append.
+    file_path (str): The path of the file to append to.
+
+    Returns:
+    str: A message indicating the success of the operation, 
+         lengths of original and new contents, the diff, or any error encountered.
+    """
+    import difflib
+
+    original_content = ""
+    original_length = 0
+    new_length = 0
+
+    try:
+        # Check if the file exists and read its contents to get the original length
+        try:
+            with open(file_path, "r") as file:
+                original_content = file.read()
+                original_length = len(original_content)
+        except FileNotFoundError:
+            original_content = ""  # File does not exist, so original content is empty
+            original_length = 0
+
+        # Append the new log message to the file
+        with open(file_path, "a") as file:
+            file.write(log_message + "\n")
+
+        # Read the updated file to determine the new length
+        with open(file_path, "r") as file:
+            updated_content = file.read()
+            new_length = len(updated_content)
+
+        # Generate the diff between the original and updated content
+        diff = "\n".join(difflib.unified_diff(
+            original_content.splitlines(),
+            updated_content.splitlines(),
+            lineterm="",
+            fromfile="original",
+            tofile="updated"
+        ))
+
+        return (f"{file_path} successfully appended. Original length: {original_length}, "
+                f"New length: {new_length}.\n\nDiff:\n{diff}")
+
+    except Exception as e:
+        return (file_path + " append error: " + str(e))
 
 def write_file(file_path, code):
     """
