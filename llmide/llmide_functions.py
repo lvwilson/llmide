@@ -9,6 +9,10 @@ import sys
 from . import code_scissors
 import pwd
 from . import findreplace
+from . import claudeclient
+import difflib
+
+_backticks = '`````'
 
 def get_default_shell():
     """Returns the default shell for the current user."""
@@ -20,18 +24,56 @@ def get_default_shell():
         return pwd.getpwuid(os.getuid()).pw_shell
     
 def find_and_replace(file_path, command):
+    """
+    Perform a find and replace operation on a file and return the diff.
+
+    Parameters:
+    file_path (str): Path to the file to modify.
+    command: The find-replace command to execute (handled by `findreplace.find_replace`).
+
+    Returns:
+    str: A message indicating the success of the operation, or any error encountered,
+         along with the diff of changes made.
+    """
     try:
         with open(file_path, "r") as file:
-            source_code = file.read()
+            original_content = file.read()
     except Exception as e:
         return (file_path + " read error: " + str(e))
-    source_code = findreplace.find_replace(source_code, command)
+
+    # Perform the find and replace operation
+    modified_content = findreplace.find_replace(original_content, command)
+
+    # Generate the diff
+    diff = "\n".join(difflib.unified_diff(
+        original_content.splitlines(),
+        modified_content.splitlines(),
+        lineterm="",
+        fromfile="original",
+        tofile="modified"
+    ))
+
     try:
         with open(file_path, "w") as file:
-            file.write(source_code)
-        return (file_path + " successfully written.")
+            file.write(modified_content)
+        return (f"{file_path} successfully written.\n\nDiff:\n{diff}")
     except Exception as e:
         return (file_path + " write error: " + str(e))
+
+
+# def find_and_replace(file_path, command):
+#     try:
+#         with open(file_path, "r") as file:
+#             source_code = file.read()
+#     except Exception as e:
+#         return (file_path + " read error: " + str(e))
+#     source_code = findreplace.find_replace(source_code, command)
+#     try:
+#         with open(file_path, "w") as file:
+#             file.write(source_code)
+#         return (file_path + " successfully written.")
+#     except Exception as e:
+#         return (file_path + " write error: " + str(e))
 
 def insert_text_after_matching_line(file_path, line, new_code):
     try:
@@ -262,25 +304,89 @@ def remove_code_at_address(file_path, address):
     except Exception as e:
         return (file_path + " write error: " + str(e))
 
-def write_text_to_file(file_path, code):
+
+def write_file(file_path, code):
     """
-    Write the given code to a file specified by file_path. Use this when creating a new file.
+    Write the given code to a file specified by file_path.
+    Outputs the lengths of the original and new file contents, as well as the diff.
 
     Parameters:
     code (str): The code to write.
     file_path (str): The path of the file to write to.
 
     Returns:
-    str: A message indicating whether the file was successfully written or an error occurred.
+    str: A message indicating the success of the operation, 
+         lengths of original and new contents, the diff, or any error encountered.
     """
+    original_content = ""
+    original_length = 0
+    new_length = len(code)
+
     try:
+        # Check if the file exists and read its contents to get the original length
+        try:
+            with open(file_path, "r") as file:
+                original_content = file.read()
+                original_length = len(original_content)
+        except FileNotFoundError:
+            original_content = ""  # File does not exist, so original content is empty
+            original_length = 0
+
+        # Generate the diff between the original and new content
+        diff = "\n".join(difflib.unified_diff(
+            original_content.splitlines(),
+            code.splitlines(),
+            lineterm="",
+            fromfile="original",
+            tofile="new"
+        ))
+
+        # Write the new content to the file
         with open(file_path, "w") as file:
             file.write(code)
-        return (file_path + " successfully written.")
+
+        return (f"{file_path} successfully written. Original length: {original_length}, "
+                f"New length: {new_length}.\n\nDiff:\n{diff}")
+
     except Exception as e:
         return (file_path + " write error: " + str(e))
 
-def read_text_from_file(file_path):
+# def write_file(file_path, code):
+#     """
+#     Write the given code to a file specified by file_path. 
+#     Outputs the lengths of the original and new file contents.
+
+#     Parameters:
+#     code (str): The code to write.
+#     file_path (str): The path of the file to write to.
+
+#     Returns:
+#     str: A message indicating the success of the operation, 
+#          lengths of original and new contents, or any error encountered.
+#     """
+#     original_length = 0
+#     new_length = len(code)
+
+#     try:
+#         # Check if the file exists and read its contents to get the original length
+#         try:
+#             with open(file_path, "r") as file:
+#                 original_content = file.read()
+#                 original_length = len(original_content)
+#         except FileNotFoundError:
+#             original_length = 0  # File does not exist, so original length is 0
+        
+#         # Write the new content to the file
+#         with open(file_path, "w") as file:
+#             file.write(code)
+        
+#         return (f"{file_path} successfully written. Original length: {original_length}, "
+#                 f"New length: {new_length}.")
+
+#     except Exception as e:
+#         return (file_path + " write error: " + str(e))
+
+def read_file(file_path):
     """
     Read the entire source file specified by file_path.
 

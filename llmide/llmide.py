@@ -21,9 +21,9 @@ def process_slice(content):
     # Regex pattern to find the command and arguments
     command_pattern = r"^Command: (\S+)\s*(.*)$"
     # Updated regex pattern to ignore the language specifier in the opening backticks
-    #backtick_pattern = r"```(?:\w+)?\s*(.*?)```"
+    #backtick_pattern = r"`````(?:\w+)?\s*(.*?)`````"
     # Updated to catch special characters
-    backtick_pattern = r"```(?:[\w#\+\-]+)?\s*(.*?)```"
+    backtick_pattern = r"`````(?:[\w#\+\-]+)?\s*(.*?)`````"
     
     # Searching for the command and arguments
     command_match = re.search(command_pattern, content, re.MULTILINE)
@@ -80,13 +80,13 @@ def filter_content(content):
     command, arguments, backtick_content, remaining_content = process_slice(content)
     if command:
         command = CommandInfo(command, arguments, backtick_content)
-        if command =='read_text_from_file':
+        if command =='read_file':
             read_command_encountered = True
     previous_remaining_content = remaining_content
     while command:
         command, arguments, backtick_content, remaining_content = process_slice(remaining_content)
         if command:
-            if command =='read_text_from_file':
+            if command =='read_file':
                 read_command_encountered = True
             elif read_command_encountered:
                 n_to_copy = len(content) - len(previous_remaining_content)
@@ -148,10 +148,10 @@ def terminate_process():
 # content = """
 # Random content...
 # Command: test_function arg1 arg2
-# ```Python
+# `````Python
 # stuff in here
 # and more stuff
-# ```
+# `````
 # """
 
 # content = """
