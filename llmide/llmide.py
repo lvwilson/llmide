@@ -1,6 +1,10 @@
 import re
 from collections import namedtuple
 from . import llmide_functions
+from PIL import Image, UnidentifiedImageError
+import io
+import base64
+import os
 
 def split_preserving_quotes(s):
     # This regex will split by spaces but preserve quoted segments
@@ -106,19 +110,93 @@ def process_content(content):
             commands.append(CommandInfo(command, arguments, backtick_content))
         #append all of the above to the structure properly
     response = ""
+    image_data_tuple_array = []
     if len(commands) == 0:
-        return "End."
+        return "End.", []
     for command in commands:
-        command_response = _execute_command(command.command, command.arguments, command.backtick_content) + "\n"
-        if command.command == "run_console_command":            
-            limit = 10000
-            if len(command_response) >= limit:
-                concise_command_response = concise_representation (command_response, limit)
-                command_response = f"Truncating command response to {limit} characters...\n"+concise_command_response
-                print (command_response)
+        if command.command == "view_image":
+            command_response, image_array = _view_images(command.arguments)
+            for image_mediatype_tuple in image_array:
+                image_data_tuple_array.append(image_mediatype_tuple)
+        else:
+            command_response = _execute_command(command.command, command.arguments, command.backtick_content) + "\n"
+            if command.command == "run_console_command":            
+                limit = 10000
+                if len(command_response) >= limit:
+                    concise_command_response = concise_representation (command_response, limit)
+                    command_response = f"Truncating command response to {limit} characters...\n"+concise_command_response
+                    #print (command_response)
         response += command_response
-    return response
+    return response, image_data_tuple_array
     
+def load_and_resize_image(image_path):
+    try:
+        # Check if the file exists
+        if not os.path.exists(image_path):
+            raise FileNotFoundError(f"The file at {image_path} does not exist.")
+
+        # Open the image using PIL
+        image = Image.open(image_path)
+    
+    except FileNotFoundError as e:
+        return str(e), None
+    except UnidentifiedImageError:
+        return "The file is not a valid image.", None
+    except Exception as e:
+        return f"An error occurred: {e}", None
+
+    # Get the current dimensions
+    original_width, original_height = image.size
+    
+    # Define the constraints
+    max_pixels = 1_150_000  # 1.15 megapixels
+    max_dimension = 1568
+
+    # Calculate the scaling factor to ensure the image meets both constraints
+    scaling_factor = min(
+        1,  # Do not upscale images
+        max_dimension / max(original_width, original_height),
+        (max_pixels / (original_width * original_height)) ** 0.5
+    )
+
+    # Calculate the new dimensions
+    new_width = int(original_width * scaling_factor)
+    new_height = int(original_height * scaling_factor)
+
+    # Resize the image
+    resized_image = image.resize((new_width, new_height), Image.LANCZOS)
+
+    # Save the resized image to a BytesIO buffer
+    buffer = io.BytesIO()
+    resized_image.save(buffer, format=image.format)
+    buffer.seek(0)
+
+    # Encode the resized image back to base64
+    resized_image_base64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+    # Determine the media type
+    media_type = Image.MIME.get(image.format, "")
+
+    # Validate media type
+    if media_type not in ["image/jpeg", "image/png", "image/gif", "image/webp"]:
+        return f"{media_type} is an unsupported media type.", None
+
+    return resized_image_base64, media_type
+
+
+def _view_images(arguments):
+    image_data_tuple_array = []
+    command_response = "Image(s) loaded successfully"
+    args = split_preserving_quotes(arguments)
+    try:
+        for argument in args:
+            image_base64, media_type = load_and_resize_image(argument)
+            image_data_tuple_array.append((image_base64, media_type))
+    except Exception as e:
+        command_response = f"An error occured loading image(s): {e}"
+        image_data_tuple_array = []
+    return command_response, image_data_tuple_array
+
 
 def _execute_command(command, arguments, backticks):
     if command is None:
