@@ -59,7 +59,6 @@ def find_and_replace(file_path, command):
     except Exception as e:
         return (file_path + " write error: " + str(e))
 
-
 # def find_and_replace(file_path, command):
 #     try:
 #         with open(file_path, "r") as file:

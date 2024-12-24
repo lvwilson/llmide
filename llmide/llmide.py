@@ -5,6 +5,7 @@ from PIL import Image, UnidentifiedImageError
 import io
 import base64
 import os
+import requests
 
 def split_preserving_quotes(s):
     # This regex will split by spaces but preserve quoted segments
@@ -115,9 +116,12 @@ def process_content(content):
         return "End.", []
     for command in commands:
         if command.command == "view_image":
-            command_response, image_array = _view_images(command.arguments)
+            command_response, image_array = view_images(command.arguments)
             for image_mediatype_tuple in image_array:
                 image_data_tuple_array.append(image_mediatype_tuple)
+        elif command.command == "create_image":
+            args = args = split_preserving_quotes(command.arguments)
+            command_response, image_array = create_image(*args)
         else:
             command_response = _execute_command(command.command, command.arguments, command.backtick_content) + "\n"
             if command.command == "run_console_command":            
@@ -184,7 +188,7 @@ def load_and_resize_image(image_path):
     return resized_image_base64, media_type
 
 
-def _view_images(arguments):
+def view_images(arguments):
     image_data_tuple_array = []
     command_response = "Image(s) loaded successfully"
     args = split_preserving_quotes(arguments)
@@ -197,6 +201,55 @@ def _view_images(arguments):
         image_data_tuple_array = []
     return command_response, image_data_tuple_array
 
+def create_image(prompt, output_file, width=1024, height=1024):
+    """
+    Generate an image using the getimg.ai API.
+
+    Parameters:
+        prompt (str): The text prompt to generate the image.
+        width (int): The width of the image (default: 1024).
+        height (int): The height of the image (default: 1024).
+        output_file (str): The path to save the output image (default: "output_image.png").
+
+    Returns:
+        str: The file path of the saved image, or an error message if the request fails.
+    """
+    auth_key = os.getenv("GETIMG_API_KEY")
+    if not auth_key:
+        return "Image generation error: getimg API key not found in environment variables.", []
+
+    url = "https://api.getimg.ai/v1/flux-schnell/text-to-image"
+    headers = {
+        "accept": "application/json",
+        "authorization": f"Bearer {auth_key}",
+        "content-type": "application/json",
+    }
+    data = {
+        "prompt": prompt,
+        "output_format": "png",
+        "response_format": "b64",
+        "width": width,
+        "height": height,
+    }
+
+    try:
+        response = requests.post(url, headers=headers, json=data)
+        response.raise_for_status()
+        response_data = response.json()
+
+        if "image" in response_data:
+            image_b64 = response_data["image"]
+            image_data = base64.b64decode(image_b64)
+
+            with open(output_file, "wb") as image_file:
+                image_file.write(image_data)
+
+            return "Image generation successful.", [(image_b64, "image/png")]
+        else:
+            return "Image generation error: Image not found in the response.", []
+
+    except requests.exceptions.RequestException as e:
+        return f"Image generation request failed: {e}", []
 
 def _execute_command(command, arguments, backticks):
     if command is None:
