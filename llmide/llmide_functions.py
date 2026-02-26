@@ -11,6 +11,9 @@ import pwd
 from . import findreplace
 import difflib
 
+# Use /dev/tty for all feedback output, reserving stdout for the stdout tool
+_tty = open('/dev/tty', 'w')
+
 _backticks = '`````'
 
 def get_default_shell():
@@ -468,6 +471,11 @@ def write_file(file_path, code):
     str: A message indicating the success of the operation, 
          lengths of original and new contents, the diff, or any error encountered.
     """
+    # Create directory if it doesn't exist
+    directory = os.path.dirname(file_path)
+    if directory and not os.path.exists(directory):
+        os.makedirs(directory, exist_ok=True)
+
     original_content = ""
     original_length = 0
     new_length = len(code)
@@ -501,41 +509,6 @@ def write_file(file_path, code):
     except Exception as e:
         return (file_path + " write error: " + str(e))
 
-# def write_file(file_path, code):
-#     """
-#     Write the given code to a file specified by file_path. 
-#     Outputs the lengths of the original and new file contents.
-
-#     Parameters:
-#     code (str): The code to write.
-#     file_path (str): The path of the file to write to.
-
-#     Returns:
-#     str: A message indicating the success of the operation, 
-#          lengths of original and new contents, or any error encountered.
-#     """
-#     original_length = 0
-#     new_length = len(code)
-
-#     try:
-#         # Check if the file exists and read its contents to get the original length
-#         try:
-#             with open(file_path, "r") as file:
-#                 original_content = file.read()
-#                 original_length = len(original_content)
-#         except FileNotFoundError:
-#             original_length = 0  # File does not exist, so original length is 0
-        
-#         # Write the new content to the file
-#         with open(file_path, "w") as file:
-#             file.write(code)
-        
-#         return (f"{file_path} successfully written. Original length: {original_length}, "
-#                 f"New length: {new_length}.")
-
-#     except Exception as e:
-#         return (file_path + " write error: " + str(e))
-
 def read_file(file_path):
     """
     Read the entire source file specified by file_path.
@@ -552,12 +525,12 @@ def read_file(file_path):
 def terminate_process():
     global process
     if process: 
-        print("Terminating process...")
+        print("Terminating process...", file=_tty)
         process.terminate()
 
 # Signal handler for SIGTERM
 def handle_sigterm(signum, frame):
-    print ("Sigterm caught")
+    print("Sigterm caught", file=_tty)
     terminate_process()
 
 #register it
@@ -583,8 +556,8 @@ def run_console_command(command: str) -> str:
                 data = os.read(fd, io.DEFAULT_BUFFER_SIZE).decode()
                 if not data:
                     break
-                sys.stdout.write(data)
-                sys.stdout.flush()
+                _tty.write(data)
+                _tty.flush()
                 output_list.append(data)
         except OSError:
             # Handle the case where the file descriptor is closed
@@ -630,6 +603,23 @@ def run_console_command(command: str) -> str:
     except Exception as e:
         return f"An error occurred: {str(e)}"
 
+def stdout(*args):
+    """
+    Write content to stdout. This is the only way to produce stdout output,
+    as all other feedback is directed to the terminal (tty).
+
+    Parameters:
+    *args: The content to write to stdout. When called with backtick block syntax,
+           the last argument contains the backtick content.
+
+    Returns:
+    str: A confirmation message.
+    """
+    content = args[-1] if args else ""
+    sys.stdout.write(content)
+    sys.stdout.flush()
+    return "Content written to stdout."
+
 def test_function(arg, backticks):
     """
     A test function to demonstrate basic functionality.
@@ -638,6 +628,6 @@ def test_function(arg, backticks):
     backticks (str): A string containing backticks.
     arg (str): An argument to print.
     """
-    print("test_function called")
-    print("Argument:", arg)
-    print("Backticks:", backticks)
+    print("test_function called", file=_tty)
+    print("Argument:", arg, file=_tty)
+    print("Backticks:", backticks, file=_tty)
