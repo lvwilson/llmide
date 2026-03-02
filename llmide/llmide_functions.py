@@ -569,6 +569,12 @@ def run_console_command(command: str) -> str:
             # Create a pseudo-terminal
             master_fd, slave_fd = pty.openpty()
             stripped_command = remove_surrounding_quotes(command)
+            # Replace escaped inner quotes (\") with literal quotes (")
+            # so that bash -c receives proper double-quoted strings.
+            # Without this, \" in bash only escapes a single " character
+            # but does NOT create a double-quoted context, causing spaces
+            # and special characters (like parentheses) to be misinterpreted.
+            stripped_command = stripped_command.replace('\\"', '"')
 
             shell_path = get_default_shell()
             
