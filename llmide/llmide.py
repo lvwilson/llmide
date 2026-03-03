@@ -123,7 +123,7 @@ def process_content(content):
             args = args = split_preserving_quotes(command.arguments)
             command_response, image_array = create_image(*args)
         else:
-            command_response = _execute_command(command.command, command.arguments, command.backtick_content) + "\n"
+            command_response = (_execute_command(command.command, command.arguments, command.backtick_content) or "ok") + "\n"
             if command.command == "run_console_command":            
                 limit = 10000
                 if len(command_response) >= limit:
@@ -262,14 +262,13 @@ def _execute_command(command, arguments, backticks):
         args = [args]
     if backticks is not None:
         args.append(backticks)
-    if not args:
-        return "Error: Arguments must be specified correctly"
     try:
         function = getattr(llmide_functions, command.lower())
     except AttributeError:
         return "Error: Command not found"
     try:
-        return function(*args)
+        result = function(*args) if args else function()
+        return result if result is not None else "ok"
     except Exception as e:
         return f"Error executing command: {e}\n {command}, {arguments}, {backticks}"
 

@@ -11,8 +11,19 @@ import pwd
 from . import findreplace
 import difflib
 
-# Use /dev/tty for all feedback output, reserving stdout for the stdout tool
-_tty = open('/dev/tty', 'w')
+# Use /dev/tty for all feedback output, reserving stdout for the stdout tool.
+# Opened lazily so that importing this module in a non-TTY environment doesn't fail.
+_tty = None
+
+def _get_tty():
+    """Return the TTY file object, opening it lazily. Falls back to stderr."""
+    global _tty
+    if _tty is None:
+        try:
+            _tty = open('/dev/tty', 'w')
+        except OSError:
+            _tty = sys.stderr
+    return _tty
 
 _backticks = '`````'
 
@@ -525,12 +536,12 @@ def read_file(file_path):
 def terminate_process():
     global process
     if process: 
-        print("Terminating process...", file=_tty)
+        print("Terminating process...", file=_get_tty())
         process.terminate()
 
 # Signal handler for SIGTERM
 def handle_sigterm(signum, frame):
-    print("Sigterm caught", file=_tty)
+    print("Sigterm caught", file=_get_tty())
     terminate_process()
 
 #register it
@@ -556,8 +567,8 @@ def run_console_command(command: str) -> str:
                 data = os.read(fd, io.DEFAULT_BUFFER_SIZE).decode()
                 if not data:
                     break
-                _tty.write(data)
-                _tty.flush()
+                _get_tty().write(data)
+                _get_tty().flush()
                 output_list.append(data)
         except OSError:
             # Handle the case where the file descriptor is closed
@@ -626,6 +637,76 @@ def stdout(*args):
     sys.stdout.flush()
     return "Content written to stdout."
 
+def summarize(*args):
+    """
+    Summarize a file or folder using an LLM.
+
+    Usage:
+        summarize path/to/file.py
+        summarize path/to/folder "*.py"
+        summarize path/to/folder "*.py" --recursive
+
+    The optional backtick block provides additional instructions to fine-tune
+    the summary (e.g. "focus on the public API" or "ignore test helpers").
+
+    Parameters:
+    *args: Positional arguments — path, optional filter pattern, optional flags.
+           The last argument is the backtick content (instruction) if provided
+           with a backtick block.
+
+    Returns:
+    str: The generated summary or an error message.
+    """
+    from . import summarize as _summarize_mod
+
+    # Separate backtick instruction from positional args.
+    # When a backtick block is attached, it becomes the final element of args.
+    positional = list(args)
+    instruction = ""
+
+    # Detect --recursive flag
+    recursive = False
+    cleaned = []
+    for a in positional:
+        if a in ("--recursive", "-r"):
+            recursive = True
+        else:
+            cleaned.append(a)
+    positional = cleaned
+
+    if not positional:
+        return "Error: summarize requires at least a file or folder path."
+
+    path = positional[0]
+
+    # If the last positional arg looks like a multi-line string or prose
+    # (not a path/glob), treat it as the instruction from backticks.
+    if len(positional) >= 2:
+        last = positional[-1]
+        # Heuristic: if it contains newlines or spaces and isn't a glob pattern,
+        # it's likely the backtick instruction content.
+        if "\n" in last or (len(last) > 60 and " " in last):
+            instruction = last
+            positional = positional[:-1]
+
+    filter_pattern = positional[1] if len(positional) >= 2 else "*"
+
+    try:
+        if os.path.isfile(path):
+            return _summarize_mod.summarize_file(path, instruction=instruction)
+        elif os.path.isdir(path):
+            return _summarize_mod.summarize_folder(
+                path,
+                filter_pattern=filter_pattern,
+                recursive=recursive,
+                instruction=instruction,
+            )
+        else:
+            return f"Error: {path} is not a file or directory."
+    except Exception as e:
+        return f"Error during summarization: {e}"
+
+
 def test_function(arg, backticks):
     """
     A test function to demonstrate basic functionality.
@@ -634,6 +715,197 @@ def test_function(arg, backticks):
     backticks (str): A string containing backticks.
     arg (str): An argument to print.
     """
-    print("test_function called", file=_tty)
-    print("Argument:", arg, file=_tty)
-    print("Backticks:", backticks, file=_tty)
+    print("test_function called", file=_get_tty())
+    print("Argument:", arg, file=_get_tty())
+    print("Backticks:", backticks, file=_get_tty())
+
+
+# ── Web Browser Commands (Playwright) ──────────────────────────────
+
+from .web_browser import get_browser, close_browser
+
+
+def web_navigate(url):
+    """
+    Navigate the browser to a URL.
+
+    Parameters:
+    url (str): The URL to navigate to.
+
+    Returns:
+    str: Status of the navigation including URL, HTTP status, and page title.
+    """
+    return get_browser().navigate(url)
+
+
+def web_back():
+    """Go back one page in browser history."""
+    return get_browser().back()
+
+
+def web_forward():
+    """Go forward one page in browser history."""
+    return get_browser().forward()
+
+
+def web_read(*args):
+    """
+    Read the visible text content of the current page or a specific element.
+
+    Parameters:
+    *args: Optional CSS selector to scope the reading.
+
+    Returns:
+    str: The text content with URL and title header.
+    """
+    selector = args[0] if args else None
+    return get_browser().read_text(selector)
+
+
+def web_read_html(*args):
+    """
+    Read the HTML of the current page or a specific element.
+
+    Parameters:
+    *args: Optional CSS selector to scope the reading.
+
+    Returns:
+    str: The HTML content.
+    """
+    selector = args[0] if args else None
+    return get_browser().read_html(selector)
+
+
+def web_links():
+    """
+    List all links on the current page.
+
+    Returns:
+    str: Formatted list of links with their text and URLs.
+    """
+    return get_browser().get_links()
+
+
+def web_click(selector):
+    """
+    Click an element on the page.
+
+    Parameters:
+    selector (str): CSS selector of the element to click.
+
+    Returns:
+    str: Confirmation of the click and current URL.
+    """
+    return get_browser().click(selector)
+
+
+def web_type(selector, text):
+    """
+    Type text into an input element.
+
+    Parameters:
+    selector (str): CSS selector of the input element.
+    text (str): The text to type.
+
+    Returns:
+    str: Confirmation of the typing action.
+    """
+    return get_browser().type_text(selector, text)
+
+
+def web_press_key(key):
+    """
+    Press a keyboard key.
+
+    Parameters:
+    key (str): The key to press (e.g. 'Enter', 'Tab', 'Escape').
+
+    Returns:
+    str: Confirmation of the key press.
+    """
+    return get_browser().press_key(key)
+
+
+def web_select(selector, value):
+    """
+    Select an option from a dropdown.
+
+    Parameters:
+    selector (str): CSS selector of the <select> element.
+    value (str): The value to select.
+
+    Returns:
+    str: Confirmation of the selection.
+    """
+    return get_browser().select_option(selector, value)
+
+
+def web_screenshot(*args):
+    """
+    Take a screenshot of the page or a specific element.
+
+    Parameters:
+    *args: file_path [optional_css_selector]
+           If one arg: saves full page screenshot to that path.
+           If two args: first is file_path, second is CSS selector.
+
+    Returns:
+    str: Confirmation with the file path.
+    """
+    if not args:
+        return "Error: web_screenshot requires at least a file path."
+    file_path = args[0]
+    selector = args[1] if len(args) > 1 else None
+    return get_browser().screenshot(file_path, selector=selector)
+
+
+def web_execute_js(*args):
+    """
+    Execute JavaScript on the current page.
+
+    Parameters:
+    *args: The JavaScript code (typically passed via backtick block).
+
+    Returns:
+    str: The result of the JavaScript execution.
+    """
+    script = args[-1] if args else None
+    if not script:
+        return "Error: web_execute_js requires JavaScript code in a backtick block."
+    return get_browser().execute_js(script)
+
+
+def web_wait(selector, *args):
+    """
+    Wait for an element to appear on the page.
+
+    Parameters:
+    selector (str): CSS selector to wait for.
+    *args: Optional timeout in milliseconds.
+
+    Returns:
+    str: Confirmation that the element was found or timeout message.
+    """
+    timeout = int(args[0]) if args else 10000
+    return get_browser().wait_for_selector(selector, timeout=timeout)
+
+
+def web_page_info():
+    """
+    Get information about the current page.
+
+    Returns:
+    str: Current URL, title, and viewport size.
+    """
+    return get_browser().get_page_info()
+
+
+def web_close():
+    """
+    Close the browser and free resources.
+
+    Returns:
+    str: Confirmation that the browser was closed.
+    """
+    close_browser()
+    return "Browser closed."
